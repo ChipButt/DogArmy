@@ -1,4 +1,4 @@
-import { ACTIONS, MISSIONS, RESOURCE_ICONS, RESOURCE_LABELS, STATION_CATALOGUE } from './gameData.js';
+import { ACTIONS, RESOURCE_ICONS, RESOURCE_LABELS, STATION_CATALOGUE } from './gameData.js';
 import { CONFIG, addLog, closeStationPopup, enterEditMode, exitEditMode, gameState, replaceGameState, selectStation } from './state.js';
 import { loadGame, resetGame, saveGame } from './save.js';
 import { addResource, consumeResource, consumeResources, hasRequiredResources } from './resources.js';
@@ -26,12 +26,15 @@ function normaliseGameState() {
     if (!station.position) station.position = { ...(STATION_CATALOGUE[station.id]?.defaultPosition || { x: 1, y: 1 }) };
     if (typeof station.automationProgress !== 'number') station.automationProgress = 0;
   }
+
   if (!gameState.stats) gameState.stats = {};
   if (!gameState.stats.nextDogNumber) gameState.stats.nextDogNumber = gameState.dogs.length + 1;
   if (!gameState.stats.nextProductId) gameState.stats.nextProductId = 1;
   if (!gameState.stats.totalDogsRescued) gameState.stats.totalDogsRescued = gameState.dogs.length;
   if (!gameState.stats.totalMissionsCompleted) gameState.stats.totalMissionsCompleted = 0;
   if (!gameState.activeLandfillMission) gameState.activeLandfillMission = null;
+  if (gameState.selectedStationId === 'missionBoard') gameState.selectedStationId = null;
+  if (gameState.editModeStationId === 'missionBoard') gameState.editModeStationId = null;
 }
 
 function loop(now) {
@@ -360,7 +363,8 @@ function renderUI() {
 }
 
 function renderTopBar() {
-  return `<header class="top-bar"><div><p class="eyebrow">Jess' Dog Army</p><h1>Rescue Plot</h1></div><div class="day-card"><strong>Day ${gameState.day}</strong><span>Level ${gameState.level}</span><div class="mini-progress"><div style="width:${getDayProgressPercent()}%"></div></div></div></header><div class="resource-strip">${resourcePill('protein')}${resourcePill('foodBowls')}${gameState.stations.waterPump.unlocked ? resourcePill('waterBowls') : ''}${gameState.stations.blanketStation.unlocked ? resourcePill('blankets') : ''}</div>`;
+  const food = Math.floor(gameState.resources.foodBowls || 0);
+  return `<header class="top-bar"><div><p class="eyebrow">Jess' Dog Army</p><h1>Rescue Plot</h1></div><button class="top-mission-btn" data-action="start-landfill-mission" ${food > 0 ? '' : 'disabled'}><span>Mission Board</span><strong>Search Landfills</strong></button><div class="day-card"><strong>Day ${gameState.day}</strong><span>Level ${gameState.level}</span><div class="mini-progress"><div style="width:${getDayProgressPercent()}%"></div></div></div></header><div class="resource-strip">${resourcePill('protein')}${resourcePill('foodBowls')}${gameState.stations.waterPump.unlocked ? resourcePill('waterBowls') : ''}${gameState.stations.blanketStation.unlocked ? resourcePill('blankets') : ''}</div>`;
 }
 
 function resourcePill(resource) {
@@ -368,7 +372,8 @@ function resourcePill(resource) {
 }
 
 function renderPlot() {
-  return `<main class="plot-wrap"><div class="plot-land" data-plot><div class="plot-texture"></div><div class="visible-grid"></div>${Object.values(gameState.stations).filter(station => station.unlocked).map(renderPlacedStation).join('')}</div></main>`;
+  const plotStations = Object.values(gameState.stations).filter(station => station.unlocked && station.id !== 'missionBoard');
+  return `<main class="plot-wrap"><div class="plot-land" data-plot><div class="plot-texture"></div><div class="visible-grid"></div>${plotStations.map(renderPlacedStation).join('')}</div></main>`;
 }
 
 function renderPlacedStation(station) {
@@ -402,11 +407,10 @@ function renderEditModeBanner() {
 
 function renderStationPopup() {
   const stationId = gameState.selectedStationId;
-  if (!stationId || gameState.editModeStationId) return '';
+  if (!stationId || gameState.editModeStationId || stationId === 'missionBoard') return '';
   const station = gameState.stations[stationId];
   const catalogue = STATION_CATALOGUE[stationId];
   if (!station || !catalogue) return '';
-  if (stationId === 'missionBoard') return renderMissionBoardPopup(station, catalogue);
   if (stationId === 'therapyYard') return renderTherapyPopup(station, catalogue);
 
   const action = ACTIONS[catalogue.actionId];
@@ -439,11 +443,6 @@ function renderProductionSlots(station, action) {
     slots.push('<div class="slot empty-slot"></div>');
   }
   return `<div class="popup-section"><strong>${action?.label || 'Production'} timer</strong><div class="production-slots">${slots.join('')}</div><p>${getStationSlotCount(station.id)}/${CONFIG.maxStationOutputSlots} output slots used. Collect products to free space.</p></div>`;
-}
-
-function renderMissionBoardPopup(station, catalogue) {
-  const food = Math.floor(gameState.resources.foodBowls || 0);
-  return `<aside class="popup-card"><button class="popup-close" data-action="close-popup">×</button><div class="popup-head"><span>${catalogue.icon}</span><div><h2>${station.name}</h2><p>${catalogue.purpose}</p></div></div><div class="popup-section"><strong>Search Landfills</strong><p>Use your Food Bowls in the landfill mini-game. If you get chased out, you return here with whatever food is left. If you escape with rescued dogs, they join the rescue centre.</p><p>Available Food Bowls: ${food}</p></div><button data-action="start-landfill-mission" ${food > 0 ? '' : 'disabled'}>Search Landfills</button></aside>`;
 }
 
 function renderTherapyPopup(station, catalogue) {
