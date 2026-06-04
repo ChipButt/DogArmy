@@ -8,6 +8,7 @@ let lastTick = performance.now();
 let renderTimer = 0;
 let pressState = null;
 let longPressTimer = null;
+let pointerIsDown = false;
 
 function initGame() {
   replaceGameState(loadGame());
@@ -26,15 +27,18 @@ function normaliseStations() {
 function loop(now) {
   const deltaSeconds = Math.min(2, (now - lastTick) / 1000);
   lastTick = now;
+
   updateDayTimer(deltaSeconds);
   updateStationActions(deltaSeconds);
   updateAutomation(deltaSeconds);
+
   renderTimer += deltaSeconds;
-  if (renderTimer >= 0.2) {
+  if (renderTimer >= 0.25 && !pointerIsDown) {
     renderTimer = 0;
     saveGame();
     renderUI();
   }
+
   requestAnimationFrame(loop);
 }
 
@@ -97,15 +101,18 @@ function getStationSlotCount(stationId) {
 function canQueueAction(stationId, actionId) {
   const station = gameState.stations[stationId];
   const action = ACTIONS[actionId];
+
   if (!station || !station.unlocked || !action) return false;
   if (getStationSlotCount(stationId) >= CONFIG.maxStationOutputSlots) return false;
   if (action.inputResource && gameState.resources[action.inputResource] < action.inputAmount) return false;
+
   return true;
 }
 
 function queueStationAction(stationId, actionId, automated = false) {
   const station = gameState.stations[stationId];
   const action = ACTIONS[actionId];
+
   if (!station || !action || !canQueueAction(stationId, actionId)) return false;
 
   if (action.inputResource && !consumeResource(action.inputResource, action.inputAmount)) {
@@ -116,6 +123,7 @@ function queueStationAction(stationId, actionId, automated = false) {
   station.actionQueue.push({ actionId, automated });
   if (!automated) addLog(`${action.label} queued at ${station.name}.`);
   startNextQueuedAction(stationId);
+
   return true;
 }
 
@@ -146,7 +154,7 @@ function completeStationAction(stationId) {
     createdAtDay: gameState.day,
   });
 
-  addLog(`${station.name} produced ${action.outputAmount} ${RESOURCE_LABELS[action.outputResource]}. Tap the stack beside the machine to collect it.`);
+  addLog(`${station.name} produced ${action.outputAmount} ${RESOURCE_LABELS[action.outputResource]}. Tap the loose icon beside the machine to collect it.`);
 }
 
 function collectProduct(stationId, productId) {
@@ -258,6 +266,7 @@ function processAcclimatisation() {
     if (hasRequiredResources(requirements)) {
       consumeResources(requirements);
       dog.acclimatisationProgress += 1;
+
       if (dog.acclimatisationProgress >= requiredDays) makeDogReady(dog.id);
       else addLog(`${dog.name} settled in a little more: ${dog.acclimatisationProgress}/${requiredDays}.`);
     } else {
@@ -282,6 +291,7 @@ function assignDogToStation(dogId, stationId) {
   dog.assignedStationId = stationId;
   dog.state = stationId === 'therapyYard' ? 'therapy' : 'assigned';
   addLog(`${dog.name} was assigned to ${station.name}.`);
+
   return true;
 }
 
@@ -402,13 +412,16 @@ function renderPlacedStation(station) {
 }
 
 function renderProduct(station, product, index) {
-  const left = ((station.position.x + 1.08 + index * 0.42) / CONFIG.gridColumns) * 100;
-  const top = ((station.position.y + 0.68) / CONFIG.gridRows) * 100;
-  return `<button class="product-bubble stack-${index}" data-action="collect-product" data-station="${station.id}" data-product="${product.id}" style="left:${left}%; top:${top}%"><span>${RESOURCE_ICONS[product.resource]}</span><small>+${product.amount}</small></button>`;
+  const column = index % 5;
+  const row = Math.floor(index / 5);
+  const left = ((station.position.x + 1.03 + column * 0.30) / CONFIG.gridColumns) * 100;
+  const top = ((station.position.y + 0.62 - row * 0.36) / CONFIG.gridRows) * 100;
+
+  return `<button class="product-bubble" data-action="collect-product" data-station="${station.id}" data-product="${product.id}" style="left:${left}%; top:${top}%; z-index:${5 + row * 10 + column}"><span>${RESOURCE_ICONS[product.resource]}</span></button>`;
 }
 
 function renderBottomDock() {
-  return `<footer class="bottom-dock"><button data-action="open-dogs">Dogs: ${gameState.dogs.length}</button><button data-action="advance-day">Next Day</button><button data-action="open-log">Log</button><button class="danger" data-action="reset-game">Reset</button></footer>`;
+  return `<footer class="bottom-dock"><button data-action="open-dogs">Dogs: ${gameState.dogs.length}</button><button data-action="open-log">Log</button><button class="danger" data-action="reset-game">Reset</button></footer>`;
 }
 
 function renderEditModeBanner() {
@@ -442,7 +455,7 @@ function renderProductionSlots(station, action) {
   for (let index = 0; index < CONFIG.maxStationOutputSlots; index += 1) {
     if (index < products.length) {
       const product = products[index];
-      slots.push(`<button class="slot product-slot" data-action="collect-product" data-station="${station.id}" data-product="${product.id}">${RESOURCE_ICONS[product.resource]}</button>`);
+      slots.push(`<button class="slot product-slot" data-action="collect-product" data-station="${station.id}" data-product="${product.id}"><span>${RESOURCE_ICONS[product.resource]}</span></button>`);
       continue;
     }
 
@@ -496,7 +509,6 @@ app.addEventListener('click', event => {
   if (action === 'collect-product') collectProduct(button.dataset.station, button.dataset.product);
   if (action === 'assign-dog') assignFirstReadyDogToStation(button.dataset.station);
   if (action === 'remove-dog') removeDogFromStation(button.dataset.dog);
-  if (action === 'advance-day') advanceDay();
   if (action === 'start-mission') startMission(button.dataset.mission);
   if (action === 'search-mission') searchMission();
   if (action === 'return-mission') returnFromMission();
@@ -507,6 +519,20 @@ app.addEventListener('click', event => {
   saveGame();
   renderUI();
 });
+
+window.addEventListener('pointerdown', () => {
+  pointerIsDown = true;
+}, { capture: true });
+
+window.addEventListener('pointerup', () => {
+  setTimeout(() => {
+    pointerIsDown = false;
+  }, 120);
+}, { capture: true });
+
+window.addEventListener('pointercancel', () => {
+  pointerIsDown = false;
+}, { capture: true });
 
 window.addEventListener('pointerdown', event => {
   const machine = event.target.closest('.machine');
