@@ -7,7 +7,7 @@ export const CONFIG = {
   saveKey: 'jess_dog_army_save_v3',
   gridColumns: 10,
   gridRows: 7,
-  maxStationOutputSlots: 5,
+  maxStationOutputSlots: 10,
   longPressMs: 550,
 };
 
