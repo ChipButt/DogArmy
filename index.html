@@ -5,11 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#7a4f2a" />
   <title>Jess' Dog Army</title>
-  <link rel="stylesheet" href="styles.css?v=mobile-scale-fix-2" />
-  <link rel="stylesheet" href="mobile-fix.css?v=mobile-scale-fix-2" />
+  <link rel="stylesheet" href="styles.css?v=landfill-integration-1" />
+  <link rel="stylesheet" href="mobile-fix.css?v=landfill-integration-1" />
+  <style>
+    .landfill-frame-screen {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background: #172316;
+      z-index: 9999;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    .landfill-frame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #172316;
+    }
+  </style>
 </head>
 <body>
   <main id="app" class="app"></main>
-  <script type="module" src="src/app.js?v=mobile-scale-fix-2"></script>
+  <script type="module" src="src/app.js?v=landfill-integration-1"></script>
 </body>
 </html>
