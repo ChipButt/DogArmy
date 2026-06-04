@@ -1,12 +1,39 @@
+import { STATION_CATALOGUE } from './gameData.js';
+
+export const CONFIG = {
+  secondsPerGameDay: 60,
+  baseAcclimatisationDays: 7,
+  missionSearchTarget: 10,
+  saveKey: 'jess_dog_army_save_v2',
+  gridColumns: 10,
+  gridRows: 7,
+};
+
 export let gameState = createDefaultState();
 
 export function createDefaultState() {
+  const stations = {};
+
+  for (const station of Object.values(STATION_CATALOGUE)) {
+    const startsUnlocked = ['chickenCoop', 'dogFoodMachine', 'missionBoard'].includes(station.id);
+    stations[station.id] = {
+      id: station.id,
+      name: station.name,
+      unlocked: startsUnlocked,
+      assignedDogIds: [],
+      position: { ...station.defaultPosition },
+      activeAction: null,
+      pendingProducts: [],
+      automationProgress: 0,
+    };
+  }
+
   return {
-    version: 1,
+    version: 2,
     day: 1,
     level: 1,
     elapsedDaySeconds: 0,
-    screen: 'centre',
+    selectedStationId: null,
     activeMission: null,
     resources: {
       protein: 0,
@@ -14,76 +41,15 @@ export function createDefaultState() {
       waterBowls: 0,
       blankets: 0,
     },
-    unlocked: {
-      chickenCoop: true,
-      dogFoodMachine: true,
-      missionBoard: true,
-      waterPump: false,
-      blanketStation: false,
-      therapyYard: false,
-    },
     dogs: [],
-    stations: {
-      chickenCoop: {
-        id: 'chickenCoop',
-        name: 'Chicken Coop',
-        description: 'Produces cartoon protein for dog food.',
-        unlocked: true,
-        assignedDogIds: [],
-        baseIntervalSeconds: 10,
-        outputResource: 'protein',
-        outputAmount: 1,
-        automationProgress: 0,
-      },
-      dogFoodMachine: {
-        id: 'dogFoodMachine',
-        name: 'Dog Food Machine',
-        description: 'Turns protein into food bowls.',
-        unlocked: true,
-        assignedDogIds: [],
-        baseIntervalSeconds: 10,
-        inputResource: 'protein',
-        inputAmount: 1,
-        outputResource: 'foodBowls',
-        outputAmount: 1,
-        automationProgress: 0,
-      },
-      waterPump: {
-        id: 'waterPump',
-        name: 'Water Pump',
-        description: 'Produces water bowls for thirsty new rescues.',
-        unlocked: false,
-        assignedDogIds: [],
-        baseIntervalSeconds: 10,
-        outputResource: 'waterBowls',
-        outputAmount: 1,
-        automationProgress: 0,
-      },
-      blanketStation: {
-        id: 'blanketStation',
-        name: 'Blanket Station',
-        description: 'Produces blankets for comfort and settling in.',
-        unlocked: false,
-        assignedDogIds: [],
-        baseIntervalSeconds: 10,
-        outputResource: 'blankets',
-        outputAmount: 1,
-        automationProgress: 0,
-      },
-      therapyYard: {
-        id: 'therapyYard',
-        name: 'Therapy Yard',
-        description: 'Mentor dogs reduce acclimatisation time.',
-        unlocked: false,
-        assignedDogIds: [],
-      },
-    },
+    stations,
     stats: {
       totalDogsRescued: 0,
       totalMissionsCompleted: 0,
       nextDogNumber: 1,
+      nextProductId: 1,
     },
-    log: ['Day 1: Jess opened the rescue centre.'],
+    log: ['Day 1: Jess opened the sandy rescue-centre plot.'],
   };
 }
 
@@ -93,9 +59,13 @@ export function replaceGameState(nextState) {
 
 export function addLog(message) {
   gameState.log.unshift(`Day ${gameState.day}: ${message}`);
-  gameState.log = gameState.log.slice(0, 25);
+  gameState.log = gameState.log.slice(0, 30);
 }
 
-export function setScreen(screen) {
-  gameState.screen = screen;
+export function selectStation(stationId) {
+  gameState.selectedStationId = stationId;
+}
+
+export function closeStationPopup() {
+  gameState.selectedStationId = null;
 }
