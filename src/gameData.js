@@ -6,10 +6,10 @@ export const RESOURCE_LABELS = {
 };
 
 export const RESOURCE_ICONS = {
-  protein: 'P',
-  foodBowls: 'F',
-  waterBowls: 'W',
-  blankets: 'B',
+  protein: '\u{1F95A}',
+  foodBowls: '\u{1F963}',
+  waterBowls: '\u{1F4A7}',
+  blankets: '\u{1F9FA}',
 };
 
 export const ACTIONS = {
@@ -57,7 +57,7 @@ export const STATION_CATALOGUE = {
   chickenCoop: {
     id: 'chickenCoop',
     name: 'Chicken Coop',
-    icon: 'C',
+    icon: '\u{1F414}',
     actionId: 'feedChickens',
     purpose: 'Produces protein supplies used by the Dog Food Machine.',
     defaultPosition: { x: 1, y: 1 },
@@ -65,7 +65,7 @@ export const STATION_CATALOGUE = {
   dogFoodMachine: {
     id: 'dogFoodMachine',
     name: 'Dog Food Machine',
-    icon: 'D',
+    icon: '\u{2699}\u{FE0F}',
     actionId: 'makeDogFood',
     purpose: 'Turns 2 protein into food bowls.',
     defaultPosition: { x: 4, y: 1 },
@@ -73,7 +73,7 @@ export const STATION_CATALOGUE = {
   missionBoard: {
     id: 'missionBoard',
     name: 'Mission Board',
-    icon: 'M',
+    icon: '\u{1F4CB}',
     actionId: null,
     purpose: 'Starts landfill searches using food bowls.',
     defaultPosition: { x: 7, y: 1 },
@@ -81,7 +81,7 @@ export const STATION_CATALOGUE = {
   waterPump: {
     id: 'waterPump',
     name: 'Water Pump',
-    icon: 'W',
+    icon: '\u{1F6B0}',
     actionId: 'pumpWater',
     purpose: 'Produces water bowls.',
     defaultPosition: { x: 2, y: 4 },
@@ -89,7 +89,7 @@ export const STATION_CATALOGUE = {
   blanketStation: {
     id: 'blanketStation',
     name: 'Blanket Station',
-    icon: 'B',
+    icon: '\u{1F9F5}',
     actionId: 'stitchBlanket',
     purpose: 'Produces blankets.',
     defaultPosition: { x: 5, y: 4 },
@@ -97,7 +97,7 @@ export const STATION_CATALOGUE = {
   therapyYard: {
     id: 'therapyYard',
     name: 'Therapy Yard',
-    icon: 'T',
+    icon: '\u{1F436}',
     actionId: null,
     purpose: 'Assign mentor dogs here to reduce acclimatisation time.',
     defaultPosition: { x: 8, y: 4 },
