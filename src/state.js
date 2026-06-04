@@ -4,9 +4,11 @@ export const CONFIG = {
   secondsPerGameDay: 60,
   baseAcclimatisationDays: 7,
   missionSearchTarget: 10,
-  saveKey: 'jess_dog_army_save_v2',
+  saveKey: 'jess_dog_army_save_v3',
   gridColumns: 10,
   gridRows: 7,
+  maxStationOutputSlots: 5,
+  longPressMs: 550,
 };
 
 export let gameState = createDefaultState();
@@ -23,17 +25,19 @@ export function createDefaultState() {
       assignedDogIds: [],
       position: { ...station.defaultPosition },
       activeAction: null,
+      actionQueue: [],
       pendingProducts: [],
       automationProgress: 0,
     };
   }
 
   return {
-    version: 2,
+    version: 3,
     day: 1,
     level: 1,
     elapsedDaySeconds: 0,
     selectedStationId: null,
+    editModeStationId: null,
     activeMission: null,
     resources: {
       protein: 0,
@@ -68,4 +72,13 @@ export function selectStation(stationId) {
 
 export function closeStationPopup() {
   gameState.selectedStationId = null;
+}
+
+export function enterEditMode(stationId) {
+  gameState.editModeStationId = stationId;
+  gameState.selectedStationId = null;
+}
+
+export function exitEditMode() {
+  gameState.editModeStationId = null;
 }
