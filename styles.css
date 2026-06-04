@@ -1,0 +1,75 @@
+:root {
+  --bg: #f5ead8;
+  --panel: #fff8ec;
+  --panel-2: #f2dfc1;
+  --ink: #2d2117;
+  --muted: #715f4e;
+  --brand: #7a4f2a;
+  --brand-dark: #56361e;
+  --accent: #e99b41;
+  --good: #3f8f5f;
+  --danger: #b64436;
+  --line: rgba(72, 48, 24, 0.18);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #fff6e6 0, var(--bg) 48%, #e0c7a7 100%);
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+button {
+  border: 0;
+  border-radius: 15px;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 850;
+  padding: 12px 14px;
+  min-height: 44px;
+  box-shadow: 0 6px 0 var(--brand-dark);
+  cursor: pointer;
+}
+button:active { transform: translateY(2px); box-shadow: 0 4px 0 var(--brand-dark); }
+button:disabled { opacity: .42; cursor: not-allowed; transform: none; }
+.app { width: min(100%, 540px); margin: 0 auto; padding: max(12px, env(safe-area-inset-top)) 12px max(24px, env(safe-area-inset-bottom)); }
+.hero, .card, .station, .dog-card, .mission-card, .log-item {
+  background: rgba(255,248,236,.94);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: 0 12px 28px rgba(65,42,20,.14);
+}
+.hero { position: sticky; top: 8px; z-index: 5; padding: 16px; backdrop-filter: blur(10px); }
+.hero-row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.eyebrow { margin: 0 0 4px; color: var(--brand); font-size: .78rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+h1 { font-size: 1.75rem; line-height: 1; margin: 0; }
+h2 { font-size: 1.1rem; margin: 0 0 8px; }
+p { margin-top: 0; }
+.muted, .hint { color: var(--muted); }
+.day-pill { background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; text-align: right; min-width: 96px; }
+.progress { height: 10px; background: rgba(86,54,30,.13); border-radius: 999px; overflow: hidden; margin-top: 12px; }
+.progress > div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--good)); transition: width .2s ease; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.tab { background: #ead8be; color: var(--ink); box-shadow: none; font-size: .82rem; padding: 9px 6px; }
+.tab.active { background: var(--brand); color: white; }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+.tile, .card { padding: 14px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; }
+.tile span { display: block; color: var(--muted); font-size: .84rem; font-weight: 750; }
+.tile strong { display: block; font-size: 1.75rem; line-height: 1.1; }
+.card, .station, .mission-card { margin-bottom: 12px; padding: 16px; }
+.station-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.status { background: #e5f2e9; border: 1px solid rgba(63,143,95,.25); border-radius: 999px; color: #28623f; display: inline-flex; font-size: .78rem; font-weight: 900; padding: 7px 10px; white-space: nowrap; }
+.meta { background: rgba(234,216,190,.55); border-radius: 16px; display: grid; gap: 6px; margin: 10px 0; padding: 10px; }
+.buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.secondary { background: #f1dec2; box-shadow: 0 6px 0 #c2a77f; color: var(--ink); }
+.danger { background: var(--danger); box-shadow: 0 6px 0 #742a22; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { background: #fff2d9; border: 1px solid var(--line); box-shadow: none; color: var(--ink); min-height: 36px; padding: 8px 10px; }
+.dog-card { display: grid; gap: 8px; margin-bottom: 8px; padding: 12px; }
+.mission-screen { min-height: 100vh; display: grid; align-content: center; text-align: center; padding: 24px 14px; }
+.mission-screen > * { width: min(100%, 460px); margin-left: auto; margin-right: auto; }
+.big-progress { height: 20px; }
+.log-item { padding: 12px; margin-bottom: 8px; }
+@media (max-width: 360px) { .buttons { grid-template-columns: 1fr; } h1 { font-size: 1.5rem; } }
