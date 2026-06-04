@@ -35,6 +35,7 @@ function mergeState(fresh, saved) {
       position: savedStation.position || station.position,
       assignedDogIds: Array.isArray(savedStation.assignedDogIds) ? savedStation.assignedDogIds : [],
       pendingProducts: Array.isArray(savedStation.pendingProducts) ? savedStation.pendingProducts : [],
+      actionQueue: Array.isArray(savedStation.actionQueue) ? savedStation.actionQueue : [],
       activeAction: savedStation.activeAction || null,
       automationProgress: Number(savedStation.automationProgress || 0),
     };
@@ -49,6 +50,7 @@ function mergeState(fresh, saved) {
     stats: { ...fresh.stats, ...(saved.stats || {}) },
     log: Array.isArray(saved.log) ? saved.log : fresh.log,
     selectedStationId: null,
+    editModeStationId: null,
     activeMission: saved.activeMission || null,
   };
 }
