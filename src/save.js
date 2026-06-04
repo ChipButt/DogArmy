@@ -1,5 +1,4 @@
-import { CONFIG } from './config.js';
-import { createDefaultState, gameState, replaceGameState } from './state.js';
+import { CONFIG, createDefaultState, gameState, replaceGameState } from './state.js';
 
 export function saveGame() {
   localStorage.setItem(CONFIG.saveKey, JSON.stringify(gameState));
@@ -8,21 +7,11 @@ export function saveGame() {
 export function loadGame() {
   const fresh = createDefaultState();
   const raw = localStorage.getItem(CONFIG.saveKey);
-
   if (!raw) return fresh;
 
   try {
     const saved = JSON.parse(raw);
-    return {
-      ...fresh,
-      ...saved,
-      resources: { ...fresh.resources, ...(saved.resources || {}) },
-      unlocked: { ...fresh.unlocked, ...(saved.unlocked || {}) },
-      stations: mergeStations(fresh.stations, saved.stations || {}),
-      stats: { ...fresh.stats, ...(saved.stats || {}) },
-      dogs: Array.isArray(saved.dogs) ? saved.dogs : [],
-      log: Array.isArray(saved.log) ? saved.log : fresh.log,
-    };
+    return mergeState(fresh, saved);
   } catch (error) {
     console.warn('Save failed to load. Starting fresh.', error);
     return fresh;
@@ -35,17 +24,31 @@ export function resetGame() {
   saveGame();
 }
 
-function mergeStations(base, saved) {
-  const merged = {};
+function mergeState(fresh, saved) {
+  const mergedStations = { ...fresh.stations };
 
-  for (const [id, station] of Object.entries(base)) {
-    merged[id] = {
+  for (const [id, station] of Object.entries(fresh.stations)) {
+    const savedStation = saved.stations?.[id] || {};
+    mergedStations[id] = {
       ...station,
-      ...(saved[id] || {}),
-      assignedDogIds: Array.isArray(saved[id]?.assignedDogIds) ? saved[id].assignedDogIds : [],
-      automationProgress: Number(saved[id]?.automationProgress || 0),
+      ...savedStation,
+      position: savedStation.position || station.position,
+      assignedDogIds: Array.isArray(savedStation.assignedDogIds) ? savedStation.assignedDogIds : [],
+      pendingProducts: Array.isArray(savedStation.pendingProducts) ? savedStation.pendingProducts : [],
+      activeAction: savedStation.activeAction || null,
+      automationProgress: Number(savedStation.automationProgress || 0),
     };
   }
 
-  return merged;
+  return {
+    ...fresh,
+    ...saved,
+    resources: { ...fresh.resources, ...(saved.resources || {}) },
+    stations: mergedStations,
+    dogs: Array.isArray(saved.dogs) ? saved.dogs : [],
+    stats: { ...fresh.stats, ...(saved.stats || {}) },
+    log: Array.isArray(saved.log) ? saved.log : fresh.log,
+    selectedStationId: null,
+    activeMission: saved.activeMission || null,
+  };
 }
