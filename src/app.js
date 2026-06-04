@@ -4,6 +4,8 @@ import { loadGame, resetGame, saveGame } from './save.js';
 import { addResource, consumeResource, consumeResources, hasRequiredResources } from './resources.js';
 
 const app = document.getElementById('app');
+const LANDFILL_URL = 'https://chipbutt.github.io/RescueDogs/?embedded=1';
+
 let lastTick = performance.now();
 let renderTimer = 0;
 let pressState = null;
@@ -12,25 +14,35 @@ let pointerIsDown = false;
 
 function initGame() {
   replaceGameState(loadGame());
-  normaliseStations();
+  normaliseGameState();
   renderUI();
   requestAnimationFrame(loop);
 }
 
-function normaliseStations() {
+function normaliseGameState() {
   for (const station of Object.values(gameState.stations)) {
     if (!Array.isArray(station.actionQueue)) station.actionQueue = [];
     if (!Array.isArray(station.pendingProducts)) station.pendingProducts = [];
+    if (!station.position) station.position = { ...(STATION_CATALOGUE[station.id]?.defaultPosition || { x: 1, y: 1 }) };
+    if (typeof station.automationProgress !== 'number') station.automationProgress = 0;
   }
+  if (!gameState.stats) gameState.stats = {};
+  if (!gameState.stats.nextDogNumber) gameState.stats.nextDogNumber = gameState.dogs.length + 1;
+  if (!gameState.stats.nextProductId) gameState.stats.nextProductId = 1;
+  if (!gameState.stats.totalDogsRescued) gameState.stats.totalDogsRescued = gameState.dogs.length;
+  if (!gameState.stats.totalMissionsCompleted) gameState.stats.totalMissionsCompleted = 0;
+  if (!gameState.activeLandfillMission) gameState.activeLandfillMission = null;
 }
 
 function loop(now) {
   const deltaSeconds = Math.min(2, (now - lastTick) / 1000);
   lastTick = now;
 
-  updateDayTimer(deltaSeconds);
-  updateStationActions(deltaSeconds);
-  updateAutomation(deltaSeconds);
+  if (!gameState.activeLandfillMission) {
+    updateDayTimer(deltaSeconds);
+    updateStationActions(deltaSeconds);
+    updateAutomation();
+  }
 
   renderTimer += deltaSeconds;
   if (renderTimer >= 0.25 && !pointerIsDown) {
@@ -74,21 +86,15 @@ function updateStationActions(deltaSeconds) {
   }
 }
 
-function updateAutomation(deltaSeconds) {
+function updateAutomation() {
   for (const station of Object.values(gameState.stations)) {
     if (!station.unlocked || station.id === 'therapyYard' || station.id === 'missionBoard') continue;
+    if (station.assignedDogIds.length <= 0) continue;
+    if (getStationSlotCount(station.id) >= CONFIG.maxStationOutputSlots) continue;
+    if (station.activeAction || station.actionQueue.length > 0) continue;
 
-    const dogCount = station.assignedDogIds.length;
-    if (dogCount <= 0 || getStationSlotCount(station.id) >= CONFIG.maxStationOutputSlots) continue;
-
-    station.automationProgress += deltaSeconds;
-    const interval = Math.max(2.5, 10 / dogCount);
-
-    if (station.automationProgress >= interval) {
-      station.automationProgress = 0;
-      const actionId = STATION_CATALOGUE[station.id]?.actionId;
-      if (actionId) queueStationAction(station.id, actionId, true);
-    }
+    const actionId = STATION_CATALOGUE[station.id]?.actionId;
+    if (actionId) queueStationAction(station.id, actionId, true);
   }
 }
 
@@ -101,48 +107,38 @@ function getStationSlotCount(stationId) {
 function canQueueAction(stationId, actionId) {
   const station = gameState.stations[stationId];
   const action = ACTIONS[actionId];
-
   if (!station || !station.unlocked || !action) return false;
   if (getStationSlotCount(stationId) >= CONFIG.maxStationOutputSlots) return false;
   if (action.inputResource && gameState.resources[action.inputResource] < action.inputAmount) return false;
-
   return true;
 }
 
 function queueStationAction(stationId, actionId, automated = false) {
   const station = gameState.stations[stationId];
   const action = ACTIONS[actionId];
-
   if (!station || !action || !canQueueAction(stationId, actionId)) return false;
 
   if (action.inputResource && !consumeResource(action.inputResource, action.inputAmount)) {
-    if (!automated) addLog(`${station.name} needs ${RESOURCE_LABELS[action.inputResource]}.`);
+    if (!automated) addLog(`${station.name} needs ${action.inputAmount} ${RESOURCE_LABELS[action.inputResource]}.`);
     return false;
   }
 
   station.actionQueue.push({ actionId, automated });
   if (!automated) addLog(`${action.label} queued at ${station.name}.`);
   startNextQueuedAction(stationId);
-
   return true;
 }
 
 function startNextQueuedAction(stationId) {
   const station = gameState.stations[stationId];
   if (!station || station.activeAction || station.actionQueue.length === 0) return;
-
   const next = station.actionQueue.shift();
-  station.activeAction = {
-    actionId: next.actionId,
-    elapsed: 0,
-    automated: next.automated,
-  };
+  station.activeAction = { actionId: next.actionId, elapsed: 0, automated: next.automated };
 }
 
 function completeStationAction(stationId) {
   const station = gameState.stations[stationId];
   if (!station?.activeAction) return;
-
   const action = ACTIONS[station.activeAction.actionId];
   station.activeAction = null;
   if (!action) return;
@@ -154,16 +150,14 @@ function completeStationAction(stationId) {
     createdAtDay: gameState.day,
   });
 
-  addLog(`${station.name} produced ${action.outputAmount} ${RESOURCE_LABELS[action.outputResource]}. Tap the loose icon beside the machine to collect it.`);
+  addLog(`${station.name} produced ${action.outputAmount} ${RESOURCE_LABELS[action.outputResource]}.`);
 }
 
 function collectProduct(stationId, productId) {
   const station = gameState.stations[stationId];
   if (!station) return;
-
   const product = station.pendingProducts.find(item => item.id === productId);
   if (!product) return;
-
   addResource(product.resource, product.amount);
   station.pendingProducts = station.pendingProducts.filter(item => item.id !== productId);
   addLog(`Collected ${product.amount} ${RESOURCE_LABELS[product.resource]}.`);
@@ -172,7 +166,6 @@ function collectProduct(stationId, productId) {
 function moveStationToTile(stationId, x, y) {
   const station = gameState.stations[stationId];
   if (!station) return;
-
   station.position.x = clamp(x, 0, CONFIG.gridColumns - 1);
   station.position.y = clamp(y, 0, CONFIG.gridRows - 1);
 }
@@ -180,7 +173,6 @@ function moveStationToTile(stationId, x, y) {
 function moveStationToPointer(stationId, event) {
   const plot = document.querySelector('[data-plot]');
   if (!plot) return;
-
   const rect = plot.getBoundingClientRect();
   const x = Math.floor(((event.clientX - rect.left) / rect.width) * CONFIG.gridColumns);
   const y = Math.floor(((event.clientY - rect.top) / rect.height) * CONFIG.gridRows);
@@ -213,17 +205,14 @@ function rescueDog(count = 1) {
       addLog(`${dog.name} was rescued and entered the kennels.`);
     }
   }
-
   checkProgressionUnlocks();
 }
 
 function makeDogReady(dogId, silent = false) {
   const dog = gameState.dogs.find(item => item.id === dogId);
   if (!dog) return;
-
   dog.state = 'ready';
   dog.assignedStationId = null;
-
   if (!silent) addLog(`${dog.name} finished acclimatising and joined the dog army.`);
 }
 
@@ -252,21 +241,17 @@ function getCurrentAcclimatisationRequirements() {
 
 function processAcclimatisation() {
   const requiredDays = getEffectiveAcclimatisationDays();
-
   for (const dog of gameState.dogs) {
     if (dog.state !== 'acclimatising') continue;
-
     if (requiredDays === 0) {
       makeDogReady(dog.id);
       continue;
     }
 
     const requirements = getCurrentAcclimatisationRequirements();
-
     if (hasRequiredResources(requirements)) {
       consumeResources(requirements);
       dog.acclimatisationProgress += 1;
-
       if (dog.acclimatisationProgress >= requiredDays) makeDogReady(dog.id);
       else addLog(`${dog.name} settled in a little more: ${dog.acclimatisationProgress}/${requiredDays}.`);
     } else {
@@ -285,30 +270,27 @@ function assignDogToStation(dogId, stationId) {
   const dog = gameState.dogs.find(item => item.id === dogId);
   const station = gameState.stations[stationId];
   if (!dog || !station || !station.unlocked || dog.state === 'acclimatising') return false;
-
   removeDogFromStation(dogId, false);
   station.assignedDogIds.push(dogId);
   dog.assignedStationId = stationId;
   dog.state = stationId === 'therapyYard' ? 'therapy' : 'assigned';
   addLog(`${dog.name} was assigned to ${station.name}.`);
-
+  const actionId = STATION_CATALOGUE[station.id]?.actionId;
+  if (actionId) queueStationAction(station.id, actionId, true);
   return true;
 }
 
 function removeDogFromStation(dogId, logChange = true) {
   const dog = gameState.dogs.find(item => item.id === dogId);
   if (!dog) return false;
-
   for (const station of Object.values(gameState.stations)) {
     station.assignedDogIds = station.assignedDogIds.filter(id => id !== dogId);
   }
-
   if (dog.state === 'assigned' || dog.state === 'therapy') {
     dog.state = 'ready';
     dog.assignedStationId = null;
     if (logChange) addLog(`${dog.name} returned to the ready dog army.`);
   }
-
   return true;
 }
 
@@ -324,54 +306,45 @@ function checkProgressionUnlocks() {
 function unlockStation(stationId, level) {
   const station = gameState.stations[stationId];
   if (!station || station.unlocked) return;
-
   station.unlocked = true;
   gameState.level = Math.max(gameState.level, level);
   addLog(`${station.name} unlocked and can now be used on the plot.`);
 }
 
-function startMission(missionId) {
-  const mission = MISSIONS[missionId];
-  if (!mission) return;
-
-  if (!consumeResource('foodBowls', mission.foodCost)) {
-    addLog(`Not enough Food Bowls to start ${mission.name}.`);
+function startLandfillMission() {
+  const startingFood = Math.floor(gameState.resources.foodBowls || 0);
+  if (startingFood <= 0) {
+    addLog('You need at least 1 Food Bowl to search the landfills.');
     return;
   }
-
-  gameState.activeMission = { missionId, progress: 0, complete: false };
+  gameState.activeLandfillMission = {
+    startingFood,
+    startedAtDay: gameState.day,
+    url: `${LANDFILL_URL}&food=${encodeURIComponent(startingFood)}&t=${Date.now()}`,
+  };
   closeStationPopup();
   exitEditMode();
-  addLog(`${mission.name} started.`);
+  addLog(`Search Landfills started with ${startingFood} Food Bowls.`);
 }
 
-function searchMission() {
-  if (!gameState.activeMission || gameState.activeMission.complete) return;
+function completeLandfillMission(result) {
+  if (!gameState.activeLandfillMission) return;
+  const foodRemaining = Math.max(0, Number(result.foodRemaining) || 0);
+  const dogsRescued = Math.max(0, Number(result.dogsRescued) || 0);
+  gameState.resources.foodBowls = foodRemaining;
+  gameState.activeLandfillMission = null;
+  gameState.stats.totalMissionsCompleted += 1;
 
-  gameState.activeMission.progress += 1;
-  if (gameState.activeMission.progress >= CONFIG.missionSearchTarget) {
-    completeMission({ success: true, rescuedDogs: 1 });
-  }
-}
-
-function completeMission(result) {
-  if (!gameState.activeMission) return;
-
-  const mission = MISSIONS[gameState.activeMission.missionId];
-
-  if (result.success) {
-    rescueDog(result.rescuedDogs || mission.dogsRewarded);
-    gameState.stats.totalMissionsCompleted += 1;
-    addLog(`Mission complete. ${result.rescuedDogs || mission.dogsRewarded} dog rescued.`);
+  if (result.success && dogsRescued > 0) {
+    rescueDog(dogsRescued);
+    addLog(`Landfill search succeeded. ${dogsRescued} dog${dogsRescued === 1 ? '' : 's'} rescued. ${foodRemaining} Food Bowls left.`);
+  } else if (result.success) {
+    addLog(`Landfill search ended safely, but no dogs were rescued. ${foodRemaining} Food Bowls left.`);
   } else {
-    addLog('Mission failed. No dogs were rescued this time.');
+    addLog(`Landfill search failed. Returned with ${foodRemaining} Food Bowls left.`);
   }
-
-  gameState.activeMission.complete = true;
-}
-
-function returnFromMission() {
-  gameState.activeMission = null;
+  saveGame();
+  renderUI();
 }
 
 function getDayProgressPercent() {
@@ -379,11 +352,10 @@ function getDayProgressPercent() {
 }
 
 function renderUI() {
-  if (gameState.activeMission) {
-    app.innerHTML = renderMissionOverlay();
+  if (gameState.activeLandfillMission) {
+    app.innerHTML = renderLandfillFrame();
     return;
   }
-
   app.innerHTML = `<section class="game-screen ${gameState.editModeStationId ? 'editing' : ''}">${renderTopBar()}${renderPlot()}${renderBottomDock()}${renderStationPopup()}${renderEditModeBanner()}</section>`;
 }
 
@@ -407,7 +379,6 @@ function renderPlacedStation(station) {
   const progress = station.activeAction && action ? Math.min(100, (station.activeAction.elapsed / action.seconds) * 100) : 0;
   const selected = gameState.selectedStationId === station.id;
   const editing = gameState.editModeStationId === station.id;
-
   return `<button class="machine ${selected ? 'selected' : ''} ${editing ? 'editing-target' : ''}" data-action="select-station" data-station="${station.id}" style="left:${left}%; top:${top}%"><span class="machine-shadow"></span><span class="machine-icon">${catalogue.icon}</span><span class="machine-label">${station.name}</span>${station.activeAction ? `<span class="action-ring" style="--progress:${progress}"><span>${Math.round(progress)}%</span></span>` : ''}${station.actionQueue.length ? `<span class="queue-badge">+${station.actionQueue.length}</span>` : ''}</button>${station.pendingProducts.map((product, index) => renderProduct(station, product, index)).join('')}`;
 }
 
@@ -416,7 +387,6 @@ function renderProduct(station, product, index) {
   const row = Math.floor(index / 5);
   const left = ((station.position.x + 1.03 + column * 0.30) / CONFIG.gridColumns) * 100;
   const top = ((station.position.y + 0.62 - row * 0.36) / CONFIG.gridRows) * 100;
-
   return `<button class="product-bubble" data-action="collect-product" data-station="${station.id}" data-product="${product.id}" style="left:${left}%; top:${top}%; z-index:${5 + row * 10 + column}"><span>${RESOURCE_ICONS[product.resource]}</span></button>`;
 }
 
@@ -433,7 +403,6 @@ function renderEditModeBanner() {
 function renderStationPopup() {
   const stationId = gameState.selectedStationId;
   if (!stationId || gameState.editModeStationId) return '';
-
   const station = gameState.stations[stationId];
   const catalogue = STATION_CATALOGUE[stationId];
   if (!station || !catalogue) return '';
@@ -443,7 +412,6 @@ function renderStationPopup() {
   const action = ACTIONS[catalogue.actionId];
   const assignedDogs = station.assignedDogIds.map(id => gameState.dogs.find(dog => dog.id === id)).filter(Boolean);
   const canStart = action && canQueueAction(station.id, action.id);
-
   return `<aside class="popup-card"><button class="popup-close" data-action="close-popup">×</button><div class="popup-head"><span>${catalogue.icon}</span><div><h2>${station.name}</h2><p>${catalogue.purpose}</p></div></div><div class="popup-section"><strong>Purpose</strong><p>${action?.description || catalogue.purpose}</p></div>${renderProductionSlots(station, action)}<div class="popup-actions"><button data-action="queue-station-action" data-station="${station.id}" data-station-action="${action.id}" ${canStart ? '' : 'disabled'}>${action.label}</button><button class="secondary" data-action="assign-dog" data-station="${station.id}" ${getAvailableDogs().length ? '' : 'disabled'}>Assign Ready Dog</button></div><div class="assigned-list"><strong>Assigned dogs: ${assignedDogs.length}</strong>${assignedDogs.length ? assignedDogs.map(dog => `<button class="chip" data-action="remove-dog" data-dog="${dog.id}">${dog.name} ✕</button>`).join('') : '<p>No dogs assigned yet.</p>'}</div></aside>`;
 }
 
@@ -451,36 +419,31 @@ function renderProductionSlots(station, action) {
   const slots = [];
   const products = [...station.pendingProducts];
   const queued = [...station.actionQueue];
-
   for (let index = 0; index < CONFIG.maxStationOutputSlots; index += 1) {
     if (index < products.length) {
       const product = products[index];
       slots.push(`<button class="slot product-slot" data-action="collect-product" data-station="${station.id}" data-product="${product.id}"><span>${RESOURCE_ICONS[product.resource]}</span></button>`);
       continue;
     }
-
     const actionIndex = index - products.length;
     if (actionIndex === 0 && station.activeAction && action) {
       const progress = Math.min(100, (station.activeAction.elapsed / action.seconds) * 100);
       slots.push(`<div class="slot timer-slot" style="--progress:${progress}"><span>${Math.ceil(Math.max(0, action.seconds - station.activeAction.elapsed))}s</span></div>`);
       continue;
     }
-
     const queueIndex = actionIndex - (station.activeAction ? 1 : 0);
     if (queued[queueIndex]) {
-      slots.push(`<div class="slot queued-slot">⏳</div>`);
+      slots.push(`<div class="slot queued-slot">...</div>`);
       continue;
     }
-
     slots.push('<div class="slot empty-slot"></div>');
   }
-
   return `<div class="popup-section"><strong>${action?.label || 'Production'} timer</strong><div class="production-slots">${slots.join('')}</div><p>${getStationSlotCount(station.id)}/${CONFIG.maxStationOutputSlots} output slots used. Collect products to free space.</p></div>`;
 }
 
 function renderMissionBoardPopup(station, catalogue) {
-  const mission = MISSIONS.basic_rescue;
-  return `<aside class="popup-card"><button class="popup-close" data-action="close-popup">×</button><div class="popup-head"><span>${catalogue.icon}</span><div><h2>${station.name}</h2><p>${catalogue.purpose}</p></div></div><div class="popup-section"><strong>${mission.name}</strong><p>Cost: ${mission.foodCost} Food Bowls. Reward: ${mission.dogsRewarded} rescued dog.</p></div><button data-action="start-mission" data-mission="${mission.id}" ${gameState.resources.foodBowls >= mission.foodCost ? '' : 'disabled'}>Start Rescue Mission</button></aside>`;
+  const food = Math.floor(gameState.resources.foodBowls || 0);
+  return `<aside class="popup-card"><button class="popup-close" data-action="close-popup">×</button><div class="popup-head"><span>${catalogue.icon}</span><div><h2>${station.name}</h2><p>${catalogue.purpose}</p></div></div><div class="popup-section"><strong>Search Landfills</strong><p>Use your Food Bowls in the landfill mini-game. If you get chased out, you return here with whatever food is left. If you escape with rescued dogs, they join the rescue centre.</p><p>Available Food Bowls: ${food}</p></div><button data-action="start-landfill-mission" ${food > 0 ? '' : 'disabled'}>Search Landfills</button></aside>`;
 }
 
 function renderTherapyPopup(station, catalogue) {
@@ -488,16 +451,13 @@ function renderTherapyPopup(station, catalogue) {
   return `<aside class="popup-card"><button class="popup-close" data-action="close-popup">×</button><div class="popup-head"><span>${catalogue.icon}</span><div><h2>${station.name}</h2><p>${catalogue.purpose}</p></div></div><div class="popup-section"><strong>Therapy effect</strong><p>Therapy dogs reduce acclimatisation by 1 day each. Current requirement: ${getEffectiveAcclimatisationDays()} day(s).</p></div><button data-action="assign-dog" data-station="${station.id}" ${getAvailableDogs().length ? '' : 'disabled'}>Assign Therapy Dog</button><div class="assigned-list">${assignedDogs.length ? assignedDogs.map(dog => `<button class="chip" data-action="remove-dog" data-dog="${dog.id}">${dog.name} ✕</button>`).join('') : '<p>No therapy dogs assigned yet.</p>'}</div></aside>`;
 }
 
-function renderMissionOverlay() {
-  const mission = MISSIONS[gameState.activeMission.missionId];
-  const progress = Math.min(100, (gameState.activeMission.progress / CONFIG.missionSearchTarget) * 100);
-  return `<section class="mission-overlay"><div class="popup-card mission-card"><p class="eyebrow">Placeholder Mission Module</p><h1>${mission.name}</h1><p>${gameState.activeMission.complete ? 'Success! You rescued a dog.' : 'Tap search to fill the mission progress.'}</p><div class="big-ring" style="--progress:${progress}"><span>${Math.round(progress)}%</span></div>${gameState.activeMission.complete ? '<button data-action="return-mission">Return to Rescue Plot</button>' : '<button data-action="search-mission">Search</button>'}</div></section>`;
+function renderLandfillFrame() {
+  return `<section class="landfill-frame-screen"><iframe class="landfill-frame" src="${gameState.activeLandfillMission.url}" title="Search Landfills mini game"></iframe></section>`;
 }
 
 app.addEventListener('click', event => {
   const button = event.target.closest('button[data-action]');
   if (!button) return;
-
   const action = button.dataset.action;
 
   if (action === 'select-station') {
@@ -509,9 +469,7 @@ app.addEventListener('click', event => {
   if (action === 'collect-product') collectProduct(button.dataset.station, button.dataset.product);
   if (action === 'assign-dog') assignFirstReadyDogToStation(button.dataset.station);
   if (action === 'remove-dog') removeDogFromStation(button.dataset.dog);
-  if (action === 'start-mission') startMission(button.dataset.mission);
-  if (action === 'search-mission') searchMission();
-  if (action === 'return-mission') returnFromMission();
+  if (action === 'start-landfill-mission') startLandfillMission();
   if (action === 'open-dogs') addLog(`Dogs: ${gameState.dogs.length}. Ready: ${getAvailableDogs().length}. Acclimatising: ${getDogsByState('acclimatising').length}.`);
   if (action === 'open-log') alert(gameState.log.slice(0, 10).join('\n'));
   if (action === 'reset-game' && confirm("Reset Jess' Dog Army?")) resetGame();
@@ -520,32 +478,20 @@ app.addEventListener('click', event => {
   renderUI();
 });
 
-window.addEventListener('pointerdown', () => {
-  pointerIsDown = true;
-}, { capture: true });
+window.addEventListener('message', event => {
+  if (event.origin !== 'https://chipbutt.github.io') return;
+  if (event.data?.type !== 'dogarmy:landfill-result') return;
+  completeLandfillMission(event.data.result || {});
+});
 
-window.addEventListener('pointerup', () => {
-  setTimeout(() => {
-    pointerIsDown = false;
-  }, 120);
-}, { capture: true });
-
-window.addEventListener('pointercancel', () => {
-  pointerIsDown = false;
-}, { capture: true });
+window.addEventListener('pointerdown', () => { pointerIsDown = true; }, { capture: true });
+window.addEventListener('pointerup', () => { setTimeout(() => { pointerIsDown = false; }, 120); }, { capture: true });
+window.addEventListener('pointercancel', () => { pointerIsDown = false; }, { capture: true });
 
 window.addEventListener('pointerdown', event => {
   const machine = event.target.closest('.machine');
   if (!machine) return;
-
-  pressState = {
-    stationId: machine.dataset.station,
-    startX: event.clientX,
-    startY: event.clientY,
-    longPressTriggered: false,
-    dragging: false,
-  };
-
+  pressState = { stationId: machine.dataset.station, startX: event.clientX, startY: event.clientY, longPressTriggered: false, dragging: false };
   clearTimeout(longPressTimer);
   longPressTimer = setTimeout(() => {
     if (!pressState) return;
@@ -559,10 +505,8 @@ window.addEventListener('pointerdown', event => {
 
 window.addEventListener('pointermove', event => {
   if (!pressState) return;
-
   const distance = Math.hypot(event.clientX - pressState.startX, event.clientY - pressState.startY);
   if (distance > 8) pressState.dragging = true;
-
   if (gameState.editModeStationId === pressState.stationId) {
     event.preventDefault();
     moveStationToPointer(pressState.stationId, event);
