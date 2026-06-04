@@ -26,7 +26,6 @@ function normaliseGameState() {
     if (!station.position) station.position = { ...(STATION_CATALOGUE[station.id]?.defaultPosition || { x: 1, y: 1 }) };
     if (typeof station.automationProgress !== 'number') station.automationProgress = 0;
   }
-
   if (!gameState.stats) gameState.stats = {};
   if (!gameState.stats.nextDogNumber) gameState.stats.nextDogNumber = gameState.dogs.length + 1;
   if (!gameState.stats.nextProductId) gameState.stats.nextProductId = 1;
@@ -48,10 +47,10 @@ function loop(now) {
   }
 
   renderTimer += deltaSeconds;
-  if (renderTimer >= 0.25 && !pointerIsDown) {
+  if (renderTimer >= 0.25) {
     renderTimer = 0;
     saveGame();
-    renderUI();
+    if (!pointerIsDown && !gameState.activeLandfillMission) renderUI();
   }
 
   requestAnimationFrame(loop);
@@ -78,10 +77,8 @@ function updateStationActions(deltaSeconds) {
       startNextQueuedAction(station.id);
       continue;
     }
-
     station.activeAction.elapsed += deltaSeconds;
     const action = ACTIONS[station.activeAction.actionId];
-
     if (action && station.activeAction.elapsed >= action.seconds) {
       completeStationAction(station.id);
       startNextQueuedAction(station.id);
@@ -95,7 +92,6 @@ function updateAutomation() {
     if (station.assignedDogIds.length <= 0) continue;
     if (getStationSlotCount(station.id) >= CONFIG.maxStationOutputSlots) continue;
     if (station.activeAction || station.actionQueue.length > 0) continue;
-
     const actionId = STATION_CATALOGUE[station.id]?.actionId;
     if (actionId) queueStationAction(station.id, actionId, true);
   }
@@ -120,12 +116,10 @@ function queueStationAction(stationId, actionId, automated = false) {
   const station = gameState.stations[stationId];
   const action = ACTIONS[actionId];
   if (!station || !action || !canQueueAction(stationId, actionId)) return false;
-
   if (action.inputResource && !consumeResource(action.inputResource, action.inputAmount)) {
     if (!automated) addLog(`${station.name} needs ${action.inputAmount} ${RESOURCE_LABELS[action.inputResource]}.`);
     return false;
   }
-
   station.actionQueue.push({ actionId, automated });
   if (!automated) addLog(`${action.label} queued at ${station.name}.`);
   startNextQueuedAction(stationId);
@@ -145,14 +139,12 @@ function completeStationAction(stationId) {
   const action = ACTIONS[station.activeAction.actionId];
   station.activeAction = null;
   if (!action) return;
-
   station.pendingProducts.push({
     id: `product_${gameState.stats.nextProductId++}`,
     resource: action.outputResource,
     amount: action.outputAmount,
     createdAtDay: gameState.day,
   });
-
   addLog(`${station.name} produced ${action.outputAmount} ${RESOURCE_LABELS[action.outputResource]}.`);
 }
 
@@ -197,10 +189,8 @@ function rescueDog(count = 1) {
       acclimatisationProgress: 0,
       assignedStationId: null,
     };
-
     gameState.dogs.push(dog);
     gameState.stats.totalDogsRescued += 1;
-
     if (gameState.stats.totalDogsRescued === 1) {
       makeDogReady(dog.id, true);
       addLog(`${dog.name} was rescued and is ready straight away for the tutorial.`);
@@ -250,7 +240,6 @@ function processAcclimatisation() {
       makeDogReady(dog.id);
       continue;
     }
-
     const requirements = getCurrentAcclimatisationRequirements();
     if (hasRequiredResources(requirements)) {
       consumeResources(requirements);
@@ -337,7 +326,6 @@ function completeLandfillMission(result) {
   gameState.resources.foodBowls = foodRemaining;
   gameState.activeLandfillMission = null;
   gameState.stats.totalMissionsCompleted += 1;
-
   if (result.success && dogsRescued > 0) {
     rescueDog(dogsRescued);
     addLog(`Landfill search succeeded. ${dogsRescued} dog${dogsRescued === 1 ? '' : 's'} rescued. ${foodRemaining} Food Bowls left.`);
@@ -412,7 +400,6 @@ function renderStationPopup() {
   const catalogue = STATION_CATALOGUE[stationId];
   if (!station || !catalogue) return '';
   if (stationId === 'therapyYard') return renderTherapyPopup(station, catalogue);
-
   const action = ACTIONS[catalogue.actionId];
   const assignedDogs = station.assignedDogIds.map(id => gameState.dogs.find(dog => dog.id === id)).filter(Boolean);
   const canStart = action && canQueueAction(station.id, action.id);
@@ -458,7 +445,6 @@ app.addEventListener('click', event => {
   const button = event.target.closest('button[data-action]');
   if (!button) return;
   const action = button.dataset.action;
-
   if (action === 'select-station') {
     if (!pressState?.longPressTriggered && !gameState.editModeStationId) selectStation(button.dataset.station);
   }
@@ -472,9 +458,8 @@ app.addEventListener('click', event => {
   if (action === 'open-dogs') addLog(`Dogs: ${gameState.dogs.length}. Ready: ${getAvailableDogs().length}. Acclimatising: ${getDogsByState('acclimatising').length}.`);
   if (action === 'open-log') alert(gameState.log.slice(0, 10).join('\n'));
   if (action === 'reset-game' && confirm("Reset Jess' Dog Army?")) resetGame();
-
   saveGame();
-  renderUI();
+  if (!gameState.activeLandfillMission) renderUI();
 });
 
 window.addEventListener('message', event => {
